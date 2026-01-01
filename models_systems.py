@@ -199,6 +199,44 @@ class RaceAutoStat(Base):
 # CLASS SYSTEM
 # ============================================================================
 
+class ClassType(Base):
+    """Class types/categories for organization (similar to StatCategory)"""
+    __tablename__ = "class_types"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    type_name = Column(String(100), nullable=False)  # Internal identifier
+    display_name = Column(String(200))
+    description = Column(Text)
+
+    icon_emoji = Column(String(50))
+    color = Column(String(7), default='#99AAB5')  # Hex color code
+    display_order = Column(Integer, default=0)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint('guild_id', 'type_name', name='uq_guild_class_type'),
+    )
+
+
+class ClassClassType(Base):
+    """Many-to-many relationship between Classes and ClassTypes"""
+    __tablename__ = "class_class_types"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    class_name = Column(String(100), nullable=False)  # References Class.class_name
+    type_name = Column(String(100), nullable=False)  # References ClassType.type_name
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint('guild_id', 'class_name', 'type_name', name='uq_class_type_assignment'),
+    )
+
+
 class Class(Base):
     """Class configuration"""
     __tablename__ = "classes"
@@ -219,6 +257,17 @@ class Class(Base):
 
     is_starter_class = Column(Boolean, default=False, index=True)
     is_enabled = Column(Boolean, default=True)
+
+    # Class-specific progression attributes
+    class_exp_attribute_key = Column(String(100), nullable=True)  # Custom exp attribute for this class (overrides server default)
+    class_level_attribute_key = Column(String(100), nullable=True)  # Custom level attribute for this class (overrides server default)
+
+    # Class subtype categorization
+    class_subtype = Column(String(100), nullable=True)  # e.g., "elemental", "physical", "support", "healer"
+
+    # Gain type - how this class gains experience
+    # Options: "character_level" (gains when character levels up) or "class_level" (independent class leveling)
+    gain_type = Column(String(50), default="character_level")
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -488,7 +537,11 @@ class StatDefinition(Base):
     category_name = Column(String(100))
     profile_section = Column(String(50))  # section_key from ProfileSection table
 
-    stat_type = Column(String(50))  # 'basic', 'gauge', 'calculated', etc.
+    stat_type = Column(String(50))  # 'basic', 'gauge', 'calculated', etc. (legacy - use has_gauge and uses_formula instead)
+
+    # Stat behavior flags (independent, can be combined)
+    has_gauge = Column(Boolean, default=False)  # Has current/max values (HP, Mana, etc.)
+    uses_formula = Column(Boolean, default=False)  # Value calculated from formula
 
     # Investment system
     is_investable = Column(Boolean, default=False)  # Can players spend points to increase this stat?
@@ -687,6 +740,41 @@ class StatHistory(Base):
 
 
 # ============================================================================
+# CHARACTER LEVELING SYSTEM
+# ============================================================================
+
+class CharacterLevelRequirement(Base):
+    """Manual EXP requirements for specific character levels"""
+    __tablename__ = "character_level_requirements"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    level = Column(Integer, nullable=False)  # The level to reach (e.g., 2, 3, 4...)
+    exp_required = Column(BigInteger, nullable=False)  # Total EXP needed to reach this level
+
+    __table_args__ = (
+        UniqueConstraint('guild_id', 'level', name='uq_guild_level'),
+        Index('idx_character_level_req', 'guild_id', 'level'),
+    )
+
+
+class CharacterLevelReward(Base):
+    """Rewards granted when characters level up"""
+    __tablename__ = "character_level_rewards"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    level = Column(Integer, nullable=False)  # 0 = all levels, specific number = that level only
+    reward_type = Column(String, nullable=False)  # 'attribute', 'item', 'skill' (WIP), 'technique' (WIP)
+    reward_data = Column(JSON, nullable=False)  # Stores reward details (attribute_key, amount, item_id, etc.)
+    display_order = Column(Integer, default=0)  # Order to display/apply rewards
+
+    __table_args__ = (
+        Index('idx_character_level_reward', 'guild_id', 'level'),
+    )
+
+
+# ============================================================================
 # WELCOME SYSTEM
 # ============================================================================
 
@@ -771,6 +859,9 @@ class ProfileSection(Base):
 
     # Conditional display rules (JSON)
     display_conditions = Column(JSON, nullable=True)  # {"min_level": 10, "required_class": "Mage", etc.}
+
+    # Custom text content (for text-only sections)
+    custom_text = Column(Text, nullable=True)  # Optional custom text content for text sections
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

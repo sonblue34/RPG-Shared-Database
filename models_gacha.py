@@ -134,8 +134,7 @@ class GachaRank(Base):
 class GachaReward(Base):
     """
     Individual rewards (items) that can be obtained from gacha
-    Temporary system: just stores item name + rank
-    Future: Will link to unified attribute system items
+    Links to items from the unified attribute system (item panel)
     """
     __tablename__ = "gacha_rewards"
 
@@ -144,15 +143,21 @@ class GachaReward(Base):
     rank_id = Column(Integer, ForeignKey("gacha_ranks.id"), nullable=False, index=True)
     guild_id = Column(BigInteger, nullable=False, index=True)
 
-    # Reward details (temporary system)
-    reward_name = Column(String(200), nullable=False)  # Item name
-    reward_description = Column(String(500))
+    # Link to item from item panel
+    item_id = Column(BigInteger, ForeignKey("attribute_definitions.id"), nullable=True, index=True)
+    # If item_id is set, item details are pulled from AttributeDefinition
+    # If null, falls back to reward_name/description for legacy rewards
 
-    # Future: item_id = Column(Integer, ForeignKey("attribute_definitions.id"))
-    # where attribute_type = 'item'
+    # Legacy fields (for backward compatibility)
+    reward_name = Column(String(200), nullable=True)  # Item name (legacy or override)
+    reward_description = Column(String(500))  # Description (legacy or override)
+
+    # Quantity management
+    quantity_limit = Column(Integer, nullable=True)  # NULL = unlimited
+    quantity_remaining = Column(Integer, nullable=True)  # Current stock, NULL = unlimited
 
     # Display
-    reward_emoji = Column(String(50))
+    reward_emoji = Column(String(50))  # Override emoji from item
 
     # Metadata
     created_at = Column(DateTime, default=datetime.utcnow)

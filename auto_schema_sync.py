@@ -10,6 +10,22 @@ from sqlalchemy import text, inspect
 from database.db_manager import DatabaseManager
 from database.base import Base
 
+# Import ALL model files to register them with Base.metadata
+# This ensures Base.metadata.tables contains ALL tables when syncing
+from database import models
+from database import models_attributes
+from database import models_core
+from database import models_economy
+from database import models_equipment
+from database import models_gacha
+from database import models_lifetime_tiers
+from database import models_payment_pool
+from database import models_roleplay_info
+from database import models_server_config
+from database import models_systems
+from database import models_usage_tracking
+from database import models_verification
+
 
 async def sync_schema():
     """

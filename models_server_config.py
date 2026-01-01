@@ -39,13 +39,13 @@ class ServerConfig(Base):
     both_rating_max = Column(Integer, default=None)
 
     # Class System Configuration
-    classes_enabled = Column(Boolean, default=False)
+    classes_enabled = Column(Boolean, default=True)
     max_classes_per_player = Column(Integer, nullable=True)  # null = unlimited
     class_types_enabled = Column(Boolean, default=False)
     max_classes_per_type = Column(Integer, nullable=True)  # max of one type per player
 
     # Race System Configuration
-    race_system_enabled = Column(Boolean, default=False)
+    race_system_enabled = Column(Boolean, default=True)
 
     # Leveling Configuration
     # "character", "class", or "both"
@@ -62,12 +62,16 @@ class ServerConfig(Base):
     # "exp", "class_points", "stat_points", or None
     class_resource_type = Column(String, default=None, nullable=True)
 
-    # Character leveling reward types (1-4)
+    # Character leveling reward types (1-4) - DEPRECATED, use fields below instead
     # 1: Skill Points + Attribute Points
     # 2: Attribute Points only
     # 3: Skill Points only
     # 4: Attributes + Skills + Class-based Skill Points (if classes enabled)
     character_leveling_rewards = Column(Integer, default=None, nullable=True)
+
+    # Character leveling reward configuration (new system)
+    attribute_points_per_level = Column(Integer, default=0, nullable=True)  # How many attribute points per level
+    skill_points_per_level = Column(Integer, default=0, nullable=True)  # How many skill points per level
 
     # Class leveling reward types (1-7, only if classes enabled)
     # 1: Attribute Points
@@ -153,6 +157,9 @@ class ServerConfig(Base):
     # Starting money for new characters
     starting_money = Column(Integer, default=2000)
 
+    # Game channel category - where multiplayer game channels are created
+    games_category_id = Column(BigInteger, nullable=True)  # Discord category ID
+
     # ===== ITEM SYSTEM FIELDS =====
     items_enabled = Column(Boolean, default=False)
     combat_system_enabled = Column(Boolean, default=False)
@@ -194,6 +201,14 @@ class ServerConfig(Base):
     # Default: ["name", "age", "class", "level"]
     # Available: name, age, class, level, race, guild, rank, + any custom stat key
     profile_basic_info_fields = Column(JSON, nullable=True)
+
+    # ===== CLASS SYSTEM DEFAULT ATTRIBUTES =====
+    # Default attributes for all classes (can be overridden per-class)
+    default_class_exp_attribute_key = Column(String(100), nullable=True)  # Default exp attribute for all classes (e.g., "class_exp")
+    default_class_level_attribute_key = Column(String(100), nullable=True)  # Default level attribute for all classes (e.g., "class_level")
+
+    # Class subtype restrictions
+    allow_multiple_subtypes = Column(Boolean, default=False)  # Can players have multiple classes of the same subtype?
 
     # Last updated
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

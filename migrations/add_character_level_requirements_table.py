@@ -1,0 +1,85 @@
+"""
+Add character_level_requirements table for manual per-level EXP configuration
+Supports both SQLite and PostgreSQL
+"""
+import asyncio
+from sqlalchemy import text
+from database.db_manager import DatabaseManager
+
+
+async def run_migration():
+    """Create character_level_requirements table"""
+    print("\n[MIGRATION] Adding Character Level Requirements Table...")
+
+    await DatabaseManager.initialize()
+
+    async with DatabaseManager.engine.begin() as conn:
+        dialect = DatabaseManager.engine.dialect.name
+        print(f"   Database: {dialect}")
+
+        try:
+            # Check if table exists
+            if dialect == 'postgresql':
+                check_query = text("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables
+                        WHERE table_name = 'character_level_requirements'
+                    )
+                """)
+                result = await conn.execute(check_query)
+                table_exists = result.scalar()
+            else:  # sqlite
+                check_query = text("""
+                    SELECT name FROM sqlite_master
+                    WHERE type='table' AND name='character_level_requirements'
+                """)
+                result = await conn.execute(check_query)
+                table_exists = result.first() is not None
+
+            if not table_exists:
+                print("   Creating character_level_requirements table...")
+
+                if dialect == 'postgresql':
+                    await conn.execute(text("""
+                        CREATE TABLE character_level_requirements (
+                            id BIGSERIAL PRIMARY KEY,
+                            guild_id BIGINT NOT NULL,
+                            level INTEGER NOT NULL,
+                            exp_required BIGINT NOT NULL,
+                            CONSTRAINT uq_guild_level UNIQUE (guild_id, level)
+                        )
+                    """))
+
+                    # Create indexes
+                    await conn.execute(text("""
+                        CREATE INDEX idx_character_level_req ON character_level_requirements (guild_id, level)
+                    """))
+                else:  # sqlite
+                    await conn.execute(text("""
+                        CREATE TABLE character_level_requirements (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            guild_id INTEGER NOT NULL,
+                            level INTEGER NOT NULL,
+                            exp_required INTEGER NOT NULL,
+                            UNIQUE (guild_id, level)
+                        )
+                    """))
+
+                    # Create index
+                    await conn.execute(text("""
+                        CREATE INDEX idx_character_level_req ON character_level_requirements (guild_id, level)
+                    """))
+
+                print("   [OK] Created character_level_requirements table")
+            else:
+                print("   [OK] character_level_requirements table already exists")
+
+            print("\n[SUCCESS] Character level requirements table migration completed!")
+
+        except Exception as e:
+            print(f"\n[ERROR] Migration failed: {e}")
+            raise
+
+
+if __name__ == "__main__":
+    asyncio.run(run_migration())

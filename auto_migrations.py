@@ -536,6 +536,14 @@ async def run_auto_migrations():
                 """))
                 migrations_run += 1
 
+            # Migration 79: Add games_category_id to server_config for game channel organization
+            if await _column_missing(session, 'server_config', 'games_category_id'):
+                print("  → Running migration 79: Adding games_category_id to server_config...")
+                await session.execute(text("""
+                    ALTER TABLE server_config ADD COLUMN games_category_id BIGINT;
+                """))
+                migrations_run += 1
+
             # ============================================================================
             # END MIGRATIONS
             # ============================================================================

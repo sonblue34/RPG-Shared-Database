@@ -14,6 +14,7 @@ from database.models_systems import (
     Class, ClassRequirement, ClassBonus, ClassLevelConfig, ClassLevelRequirement, ClassLevelReward,
     ClassEvolution, ClassFusion, ClassAutoStat,
     StatPool, StatCategory, StatDefinition, CharacterStat, TemporaryStat, StatHistory, StatCondition, StatValueRule,
+    CharacterLevelRequirement, CharacterLevelReward,
     WelcomeSystem, AlertSystem, ProfileSection
 )
 # Import unified attribute system models (v2.0.0)
@@ -358,10 +359,12 @@ class GuildSettings(Base):
     difficulty_level = Column(Integer, default=1)  # Game difficulty
     max_character_slots = Column(Integer, default=3)  # Max character slots per player (1-6)
     starting_money = Column(Integer, default=2000)  # Starting money for new characters
+    games_category_id = Column(BigInteger, nullable=True)  # Discord category ID for game channels
     command_log_channel_id = Column(BigInteger, nullable=True)  # Channel for player bot command logs (general-log)
     admin_log_channel_id = Column(BigInteger, nullable=True)  # Channel for admin bot command logs (admin-log)
     transaction_log_channel_id = Column(BigInteger, nullable=True)  # Channel for economy transaction logs (both bots)
     server_rules = Column(String, nullable=True)  # Server rules visible to all users (including unverified)
+    card_emoji_mapping = Column(String, nullable=True)  # JSON mapping of card codes to custom emoji IDs
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     used_build_id = Column(Integer, nullable=True)  # Track which build was used
@@ -1027,58 +1030,196 @@ except ImportError:
     pass  # models_economy might not be available in all contexts
 
 # ============================================================================
+# CARD DECKS
+# ============================================================================
+
+class CardDeck(Base):
+    """Custom card decks for card games"""
+    __tablename__ = "card_decks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=True, index=True)  # Null = global deck
+    deck_name = Column(String(100), nullable=False)
+    description = Column(String(500), nullable=True)
+
+    # Deck configuration
+    is_default = Column(Boolean, default=False)  # Is this the default deck for the guild
+    is_active = Column(Boolean, default=True)
+    is_global = Column(Boolean, default=False)  # Can be used by all servers
+
+    # Metadata
+    created_by = Column(BigInteger, nullable=False)  # Discord user ID of creator
+    uploader_name = Column(String(100), nullable=True)  # Display name of uploader
+    uploaded_in_guild_id = Column(BigInteger, nullable=True)  # Original guild where deck was created
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    cards = relationship("DeckCard", back_populates="deck", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index('idx_card_decks_guild_default', 'guild_id', 'is_default'),
+        Index('idx_card_decks_global', 'is_global'),
+    )
+
+
+class DeckCard(Base):
+    """Individual cards in a custom deck"""
+    __tablename__ = "deck_cards"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    deck_id = Column(Integer, ForeignKey("card_decks.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Card identification
+    card_code = Column(String(10), nullable=False)  # e.g., "AS", "2H", "KD", "JK"
+    card_name = Column(String(50), nullable=False)  # e.g., "Ace of Spades", "Joker"
+
+    # Visual representation
+    emoji_id = Column(BigInteger, nullable=True)  # Discord custom emoji ID
+    emoji_name = Column(String(100), nullable=True)  # Emoji name for display
+    unicode_fallback = Column(String(10), nullable=True)  # Unicode character fallback
+
+    # Card properties
+    suit = Column(String(20), nullable=True)  # "Spades", "Hearts", "Diamonds", "Clubs", None for Joker
+    rank = Column(String(20), nullable=True)  # "A", "2", "3"..."K", None for Joker
+    display_order = Column(Integer, default=0)  # Order to display in lists
+
+    # Metadata
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    deck = relationship("CardDeck", back_populates="cards")
+
+    __table_args__ = (
+        UniqueConstraint('deck_id', 'card_code', name='unique_deck_card'),
+        Index('idx_deck_cards_deck_order', 'deck_id', 'display_order'),
+    )
+
+
+# ============================================================================
 # CONTINENTAL GAME
 # ============================================================================
 
 class ContinentalGame(Base):
-    """Continental coin game sessions"""
+    """Continental card game sessions"""
     __tablename__ = "continental_games"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    guild_id = Column(BigInteger, nullable=False, index=True)
-    message_id = Column(BigInteger, nullable=False, unique=True)
+    guild_id = Column(BigInteger, nullable=True, index=True)
     channel_id = Column(BigInteger, nullable=False)
+    host_id = Column(BigInteger, nullable=False)
+    board_state_message_id = Column(BigInteger, nullable=True)  # Persistent board display
+    deck_id = Column(Integer, nullable=True)  # Custom deck to use for card display
 
-    # Game details
-    game_status = Column(String, default="active", index=True)  # active, completed
-    current_pot = Column(Integer, default=0)
-    entry_fee = Column(Integer, nullable=False)
+    # Game state
+    is_active = Column(Boolean, default=True, index=True)
+    hard_mode = Column(Boolean, default=False)
+    current_round = Column(Integer, default=1)
+    current_turn_player = Column(BigInteger, nullable=True)
+
+    # Card piles (stored as JSON)
+    draw_deck = Column(String, nullable=True)  # JSON list of cards
+    discard_pile = Column(String, nullable=True)  # JSON list of cards
+    dead_pile = Column(String, nullable=True)  # JSON list of cards
+
+    # Turn state
+    has_drawn = Column(Boolean, default=False)
+    center_card_locked = Column(Boolean, default=False)
 
     # Timing
-    started_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, nullable=True)
     ended_at = Column(DateTime, nullable=True)
-
-    # Winner
-    winner_id = Column(BigInteger, nullable=True)
-    winner_character_name = Column(String, nullable=True)
+    last_discard_time = Column(DateTime, nullable=True)  # For turn priority on center grabs
+    turn_start_time = Column(DateTime, nullable=True)  # When current turn started
+    vote_in_progress = Column(Boolean, default=False)  # Whether inactivity vote is active
 
     # Relationships
     players = relationship("ContinentalPlayer", back_populates="game", cascade="all, delete-orphan")
 
 
 class ContinentalPlayer(Base):
-    """Players in continental games"""
+    """Players in Continental card games"""
     __tablename__ = "continental_players"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    game_id = Column(BigInteger, ForeignKey("continental_games.id"), nullable=False)
-    character_id = Column(BigInteger, ForeignKey("characters.id"), nullable=False)
-    user_id = Column(BigInteger, nullable=False, index=True)
+    game_id = Column(BigInteger, ForeignKey("continental_games.id"), nullable=False, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)  # Can be negative for AI players
 
-    # Player stats
-    bet_amount = Column(Integer, nullable=False)
-    is_active = Column(Boolean, default=True)
-    placement = Column(Integer, nullable=True)  # 1st, 2nd, 3rd, etc.
+    # Game data (JSON)
+    hand = Column(String, nullable=True)  # JSON list of cards in hand
+    revealed_sets = Column(String, nullable=True)  # JSON list of revealed card sets
+    round_scores = Column(String, nullable=True)  # JSON list of scores per round
 
-    # Metadata
-    joined_at = Column(DateTime, default=datetime.utcnow)
+    # UI State
+    hand_message_id = Column(BigInteger, nullable=True)  # Message ID of player's hand display
+
+    # Player state
+    turn_order = Column(Integer, nullable=False)
+    has_gone_out = Column(Boolean, default=False)
+    joined_at = Column(DateTime, default=datetime.utcnow)  # When player joined the game
 
     # Relationships
     game = relationship("ContinentalGame", back_populates="players")
 
     __table_args__ = (
-        UniqueConstraint('game_id', 'character_id', name='unique_game_player'),
+        UniqueConstraint('game_id', 'user_id', name='unique_game_player'),
     )
+
+
+class GameLobby(Base):
+    """Game lobbies for dashboard system"""
+    __tablename__ = "game_lobbies"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    channel_id = Column(BigInteger, nullable=False)
+    message_id = Column(BigInteger, nullable=True, unique=True)
+
+    # Creator info
+    creator_id = Column(BigInteger, nullable=False)
+
+    # Game details
+    game_type = Column(String, nullable=False, index=True)  # "continental", etc.
+    game_config = Column(String, nullable=True)  # JSON for game-specific settings
+
+    # Player requirements
+    min_players = Column(Integer, default=2)
+    max_players = Column(Integer, nullable=True)  # None = unlimited
+
+    # Lobby state
+    status = Column(String, default="waiting", index=True)  # waiting, starting, active, ended
+    auto_start_time = Column(DateTime, nullable=True)  # When to auto-start/cancel
+    time_limit_minutes = Column(Integer, default=30)
+
+    # Timing
+    created_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, nullable=True)
+    ended_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    participants = relationship("GameLobbyParticipant", back_populates="lobby", cascade="all, delete-orphan")
+
+
+class GameLobbyParticipant(Base):
+    """Participants in game lobbies"""
+    __tablename__ = "game_lobby_participants"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    lobby_id = Column(BigInteger, ForeignKey("game_lobbies.id"), nullable=False)
+    user_id = Column(BigInteger, nullable=False, index=True)
+
+    # Metadata
+    joined_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    lobby = relationship("GameLobby", back_populates="participants")
+
+    __table_args__ = (
+        UniqueConstraint('lobby_id', 'user_id', name='unique_lobby_participant'),
+    )
+
 
 class BotSettings(Base):
     """Bot-wide settings for temporary admin overrides"""

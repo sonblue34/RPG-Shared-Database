@@ -26,6 +26,7 @@ class ReactionRolePanel(Base):
 
     # Mode-specific settings
     role_limit = Column(Integer, nullable=True)  # For "limit" mode - max roles user can have from this panel
+    is_active = Column(Boolean, default=True)  # Whether this panel is currently active
 
     # Embed content
     embed_title = Column(String, nullable=False)
