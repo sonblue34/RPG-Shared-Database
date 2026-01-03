@@ -5,6 +5,15 @@ Checks and applies any missing database schema changes
 All base tables are created via Base.metadata.create_all() in DatabaseManager.initialize()
 This file is for incremental schema changes after initial deployment
 """
+import sys
+# Fix Windows console Unicode encoding
+if sys.platform == 'win32':
+    import io
+    if hasattr(sys.stdout, 'buffer'):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    if hasattr(sys.stderr, 'buffer'):
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 import asyncio
 from sqlalchemy import text
 from database.db_manager import DatabaseManager
