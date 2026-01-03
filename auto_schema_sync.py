@@ -1,9 +1,8 @@
 """
 Automatic Schema Sync System
 
-Checks if database tables match model definitions.
-If tables are different from code, drops and recreates them automatically.
-Replaces traditional migrations with automatic schema synchronization.
+Creates missing database tables based on model definitions.
+For schema changes to existing tables, use migrations instead.
 """
 import asyncio
 from sqlalchemy import text, inspect
@@ -30,31 +29,32 @@ from database import models_verification
 async def sync_schema():
     """
     Sync database schema with model definitions.
-    Drops and recreates tables that don't match the code.
+    - Creates new tables that don't exist
+    - Reports schema mismatches (requires manual migration)
+    - Does NOT drop or recreate existing tables
     """
     print("\n🔄 Checking database schema...")
-    
+
     await DatabaseManager.initialize()
-    
+
     async with DatabaseManager.engine.begin() as conn:
         # Get database dialect
         dialect = DatabaseManager.engine.dialect.name
         print(f"   Database: {dialect}")
-        
+
         # Get all tables from models
         model_tables = Base.metadata.tables
-        
+
         # Get existing tables from database
         def get_existing_tables(connection):
             inspector = inspect(connection)
             return set(inspector.get_table_names())
-        
+
         existing_tables = await conn.run_sync(get_existing_tables)
-        
+
         tables_to_create = []
-        tables_to_drop = []
-        tables_to_recreate = []
-        
+        tables_with_mismatches = []
+
         # Check each model table
         for table_name, table in model_tables.items():
             if table_name not in existing_tables:
@@ -62,15 +62,10 @@ async def sync_schema():
                 tables_to_create.append(table_name)
             else:
                 # Table exists - check if columns match
-                needs_recreate = await check_table_schema(conn, table_name, table, dialect)
-                if needs_recreate:
-                    tables_to_recreate.append(table_name)
-        
-        # Find tables in DB that aren't in models
-        for table_name in existing_tables:
-            if table_name not in model_tables and not table_name.startswith('alembic'):
-                tables_to_drop.append(table_name)
-        
+                mismatches = await check_table_schema(conn, table_name, table, dialect)
+                if mismatches:
+                    tables_with_mismatches.append((table_name, mismatches))
+
         # Report findings
         if tables_to_create:
             print(f"\n   📝 New tables to create: {len(tables_to_create)}")
@@ -78,53 +73,40 @@ async def sync_schema():
                 print(f"      - {table}")
             if len(tables_to_create) > 5:
                 print(f"      ... and {len(tables_to_create) - 5} more")
-        
-        if tables_to_recreate:
-            print(f"\n   🔄 Tables to recreate (schema changed): {len(tables_to_recreate)}")
-            for table in tables_to_recreate:
-                print(f"      - {table}")
-        
-        if tables_to_drop:
-            print(f"\n   🗑️  Orphaned tables to drop: {len(tables_to_drop)}")
-            for table in tables_to_drop:
-                print(f"      - {table}")
-        
+
+        if tables_with_mismatches:
+            print(f"\n   ⚠️  Tables with schema mismatches: {len(tables_with_mismatches)}")
+            print(f"   Run migrations to update these tables:")
+            for table_name, mismatch_info in tables_with_mismatches:
+                print(f"      - {table_name}")
+                if mismatch_info.get('missing'):
+                    print(f"        Missing columns: {mismatch_info['missing']}")
+                if mismatch_info.get('extra'):
+                    print(f"        Extra columns: {mismatch_info['extra']}")
+
         # Execute changes
         changes_made = False
-        
-        # Drop orphaned tables
-        for table_name in tables_to_drop:
-            print(f"   Dropping orphaned table: {table_name}")
-            await conn.execute(text(f"DROP TABLE IF EXISTS {table_name} CASCADE"))
-            changes_made = True
 
-        # Create missing tables FIRST (before recreating, in case of FK dependencies)
+        # Create missing tables
         if tables_to_create:
-            print(f"   Creating {len(tables_to_create)} new tables...")
+            print(f"\n   Creating {len(tables_to_create)} new tables...")
             # Create only missing tables
             await conn.run_sync(Base.metadata.create_all)
             changes_made = True
+            print(f"   ✅ Created {len(tables_to_create)} new tables")
 
-        # Recreate mismatched tables (after new tables exist)
-        for table_name in tables_to_recreate:
-            print(f"   Recreating table with new schema: {table_name}")
-            table = model_tables[table_name]
-            # Drop old version with CASCADE to handle foreign keys
-            await conn.execute(text(f"DROP TABLE IF EXISTS {table_name} CASCADE"))
-            # Create new version
-            await conn.run_sync(lambda sync_conn: table.create(sync_conn))
-            changes_made = True
-        
         if changes_made:
-            print("\n✅ Schema synchronized successfully!")
-        else:
+            print("\n✅ New tables created successfully!")
+        elif not tables_with_mismatches:
             print("\n✅ Schema is up to date - no changes needed")
+        else:
+            print("\n⚠️  Schema mismatches detected - run migrations to update")
 
 
-async def check_table_schema(conn, table_name: str, model_table, dialect: str) -> bool:
+async def check_table_schema(conn, table_name: str, model_table, dialect: str) -> dict:
     """
     Check if a table's schema matches the model definition.
-    Returns True if table needs to be recreated.
+    Returns dict with mismatch info, or None if schema matches.
     """
     try:
         # Get actual columns from database
@@ -141,25 +123,20 @@ async def check_table_schema(conn, table_name: str, model_table, dialect: str) -
         actual_col_names = set(actual_columns.keys())
         model_col_names = set(model_columns.keys())
 
-        # If different columns, needs recreation
+        # If different columns, return mismatch info
         if actual_col_names != model_col_names:
             missing = model_col_names - actual_col_names
             extra = actual_col_names - model_col_names
-            if missing:
-                print(f"      → Missing columns in {table_name}: {missing}")
-            if extra:
-                print(f"      → Extra columns in {table_name}: {extra}")
-            return True
+            return {
+                'missing': missing if missing else None,
+                'extra': extra if extra else None
+            }
 
-        # Could add more detailed type checking here if needed
-        # For now, just checking column names is sufficient
-
-        return False
+        return None
 
     except Exception as e:
-        # If we can't check, assume it needs recreation
         print(f"      → Error checking {table_name}: {e}")
-        return True
+        return {'error': str(e)}
 
 
 # Run sync on import (when bot starts)
