@@ -553,7 +553,7 @@ async def run_auto_migrations():
             if migrations_run > 0:
                 print(f"[OK] Applied {migrations_run} migration(s)")
             else:
-                print("✅ Database schema is up to date")
+                print("[OK] Database schema is up to date")
 
         except Exception as e:
             await session.rollback()
