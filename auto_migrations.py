@@ -12,7 +12,7 @@ from database.db_manager import DatabaseManager
 
 async def run_auto_migrations():
     """Run all automatic migrations on bot startup"""
-    print("\n🔄 Checking for pending migrations...")
+    print("\n[MIGRATIONS] Checking for pending migrations...")
 
     async with DatabaseManager.get_session() as session:
         try:
