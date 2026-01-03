@@ -551,7 +551,7 @@ async def run_auto_migrations():
             await session.commit()
 
             if migrations_run > 0:
-                print(f"✅ Applied {migrations_run} migration(s)")
+                print(f"[OK] Applied {migrations_run} migration(s)")
             else:
                 print("✅ Database schema is up to date")
 
