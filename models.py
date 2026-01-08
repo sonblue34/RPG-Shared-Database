@@ -799,6 +799,49 @@ class InformationPage(Base):
     topic = relationship("InformationTopic", back_populates="pages")
 
 
+class GuideTopic(Base):
+    """Server guide topics for player reference"""
+    __tablename__ = "guide_topics"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    title = Column(String, nullable=False)  # Topic button label (e.g., "Combat System", "Getting Started")
+    emoji = Column(String, nullable=True)  # Optional emoji for the button
+    order_index = Column(Integer, default=0)  # Display order (0-9 for max 10 topics)
+    is_published = Column(Boolean, default=False)  # Visible to players
+
+    # Metadata
+    created_by = Column(BigInteger, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    editors = Column(String, default="")  # Comma-separated list of user IDs who edited
+
+    # Relationships
+    pages = relationship("GuidePage", back_populates="topic", cascade="all, delete-orphan")
+
+
+class GuidePage(Base):
+    """Pages within guide topics"""
+    __tablename__ = "guide_pages"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=True, index=True)
+    topic_id = Column(Integer, ForeignKey("guide_topics.id"), nullable=False)
+
+    # Page details
+    page_number = Column(Integer, nullable=False)
+    content = Column(String, nullable=False)  # Page content (searchable)
+    image_url = Column(String, nullable=True)  # Optional image URL
+
+    # Metadata
+    created_by = Column(BigInteger, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    editors = Column(String, default="")  # Comma-separated list of user IDs who edited
+
+    # Relationships
+    topic = relationship("GuideTopic", back_populates="pages")
+
+
 class BackstoryPage(Base):
     """Backstory pages for approved backstories"""
     __tablename__ = "backstory_pages"
@@ -1206,7 +1249,7 @@ class GameLobbyParticipant(Base):
     """Participants in game lobbies"""
     __tablename__ = "game_lobby_participants"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     lobby_id = Column(BigInteger, ForeignKey("game_lobbies.id"), nullable=False)
     user_id = Column(BigInteger, nullable=False, index=True)
 
