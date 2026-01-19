@@ -834,42 +834,8 @@ class AlertSystem(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-class ProfileSection(Base):
-    """Profile display sections for organizing character stats"""
-    __tablename__ = "profile_sections"
-
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    guild_id = Column(BigInteger, nullable=False, index=True)
-
-    section_key = Column(String(50), nullable=False)  # Unique identifier for the section
-    section_name = Column(String(100), nullable=False)  # Display name
-    display_order = Column(Integer, default=0)  # Order in which sections appear
-    layout_mode = Column(String(20), default='list')  # list, grid, bars, compact
-    section_icon = Column(String(10))  # Emoji icon for the section
-    section_color = Column(String(7), default='#5865F2')  # Hex color code
-    show_to_player = Column(Boolean, default=True)  # Whether players can see this section
-    min_permission_level = Column(Integer, default=0)  # Minimum permission level to view
-
-    # Display customization options
-    show_section_title = Column(Boolean, default=True)  # Show section name header
-    show_border = Column(Boolean, default=False)  # Show decorative border around section
-    separator_style = Column(String(10), default='─')  # Separator character (─, ═, •, -)
-    column_count = Column(Integer, default=1)  # Number of columns for stats (1-3)
-    hide_section_if_empty = Column(Boolean, default=True)  # Hide section if no stats
-
-    # Conditional display rules (JSON)
-    display_conditions = Column(JSON, nullable=True)  # {"min_level": 10, "required_class": "Mage", etc.}
-
-    # Custom text content (for text-only sections)
-    custom_text = Column(Text, nullable=True)  # Optional custom text content for text sections
-
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    __table_args__ = (
-        UniqueConstraint('guild_id', 'section_key', name='uq_guild_section_key'),
-    )
-
+# NOTE: ProfileSection model has been REMOVED and replaced with ProfileTemplate system
+# See models_profile_template.py for the new template-based profile system
 
 # NOTE: RolePermissionLevel has been moved to models_server_config.py
 # It's imported in models.py from there to avoid duplicate table definition

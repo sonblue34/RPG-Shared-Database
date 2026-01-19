@@ -15,8 +15,9 @@ from database.models_systems import (
     ClassEvolution, ClassFusion, ClassAutoStat,
     StatPool, StatCategory, StatDefinition, CharacterStat, TemporaryStat, StatHistory, StatCondition, StatValueRule,
     CharacterLevelRequirement, CharacterLevelReward,
-    WelcomeSystem, AlertSystem, ProfileSection
+    WelcomeSystem, AlertSystem
 )
+# NOTE: ProfileSection has been removed - use ProfileTemplate from models_profile_template.py
 # Import unified attribute system models (v2.0.0)
 from database.models_attributes import (
     AttributeDefinition, CharacterAttribute, AttributeHistory
@@ -55,6 +56,22 @@ try:
     from database.models_roleplay_info import *
 except ImportError:
     pass
+# Import profile template system models
+from database.models_profile_template import (
+    ProfileTemplate, ProfileTemplateQuestion, CharacterProfile
+)
+# Import marketplace system models
+from database.models_marketplace import (
+    MarketplaceTemplate, MarketplacePermission
+)
+# Import privacy system models
+from database.models_privacy import (
+    ProfilePrivacySettings, CharacterProfilePrivacy
+)
+# Import fake profile system models
+from database.models_fake_profile import (
+    FakeProfileConfig, FakeProfile, FakeProfilePermission
+)
 # Import reaction role models
 from database.reaction_role_models import (
     ReactionRolePanel as ReactionRolePanelModel,
